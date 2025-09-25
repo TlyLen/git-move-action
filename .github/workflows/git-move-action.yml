@@ -1,0 +1,38 @@
+name: Mirror Repo with Credentials
+
+on:
+  workflow_dispatch:  # 手动触发
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create credentials file
+        run: |
+          # 创建存放仓库地址的文本文件（从secrets读取内容）
+          echo "${{ secrets.REPO_CREDENTIALS }}" > repo_credentials.txt
+          # 查看文件内容（可选，用于调试）
+          cat repo_credentials.txt
+
+      - name: Read source and target repos
+        run: |
+          # 从文件读取源仓库和目标仓库地址（格式：两行，第一行源仓库，第二行目标仓库）
+          SOURCE_REPO=$(sed -n '1p' repo_credentials.txt)
+          TARGET_REPO=$(sed -n '2p' repo_credentials.txt)
+          echo "SOURCE_REPO=$SOURCE_REPO" >> $GITHUB_ENV
+          echo "TARGET_REPO=$TARGET_REPO" >> $GITHUB_ENV
+
+      - name: Clone source repository
+        run: |
+          # 克隆源仓库（包含所有分支）
+          git clone --mirror ${{ env.SOURCE_REPO }} source_repo
+          cd source_repo
+
+      - name: Push to target repository
+        run: |
+          cd source_repo
+          # 添加目标仓库为远程
+          git remote add target ${{ env.TARGET_REPO }}
+          # 推送所有分支和标签
+          git push target --all
+          git push target --tags
