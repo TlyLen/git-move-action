@@ -1,7 +1,7 @@
-name: Mirror Repo with Timeout Fix
+name: Mirror Repo with Credentials
 
 on:
-  workflow_dispatch:
+  workflow_dispatch:  # 手动触发
 
 jobs:
   sync:
@@ -9,10 +9,14 @@ jobs:
     steps:
       - name: Create credentials file
         run: |
+          # 创建存放仓库地址的文本文件（从secrets读取内容）
           echo "${{ secrets.REPO_CREDENTIALS }}" > repo_credentials.txt
+          # 查看文件内容（可选，用于调试）
+          cat repo_credentials.txt
 
-      - name: Read repo addresses
+      - name: Read source and target repos
         run: |
+          # 从文件读取源仓库和目标仓库地址（格式：两行，第一行源仓库，第二行目标仓库）
           SOURCE_REPO=$(sed -n '1p' repo_credentials.txt)
           TARGET_REPO=$(sed -n '2p' repo_credentials.txt)
           echo "SOURCE_REPO=$SOURCE_REPO" >> $GITHUB_ENV
@@ -20,57 +24,22 @@ jobs:
 
       - name: Clean up existing directory
         run: |
+          # 如果source_repo目录存在，先删除它
           if [ -d "source_repo" ]; then
             rm -rf source_repo
           fi
 
       - name: Clone source repository
         run: |
+          # 克隆源仓库（包含所有分支）
           git clone --mirror ${{ env.SOURCE_REPO }} source_repo
           cd source_repo
 
-      - name: Configure Git timeout and buffer
+      - name: Push to target repository
         run: |
           cd source_repo
-          # 增加HTTP超时时间（10分钟）
-          git config http.postBuffer 524288000  # 500MB缓冲区
-          git config http.timeout 600
-          git config http.keepAlive true
-
-      - name: Push branches in batches
-        run: |
-          cd source_repo
+          # 添加目标仓库为远程
           git remote add target ${{ env.TARGET_REPO }}
-          
-          # 获取所有分支并分批推送（每次5个分支，避免单次推送过大）
-          branches=$(git branch -r | grep -v 'HEAD' | sed 's/origin\///' | tr '\n' ' ')
-          echo "Branches to push: $branches"
-          
-          # 分批推送函数
-          batch_push() {
-            local batch=()
-            for branch in $branches; do
-              batch+=("$branch")
-              if [ ${#batch[@]} -eq 5 ]; then
-                echo "Pushing batch: ${batch[*]}"
-                git push target "${batch[@]}" || {
-                  echo "Failed to push batch, retrying..."
-                  git push target "${batch[@]}"  # 重试一次
-                }
-                batch=()
-              fi
-            done
-            # 推送剩余分支
-            if [ ${#batch[@]} -gt 0 ]; then
-              echo "Pushing remaining: ${batch[*]}"
-              git push target "${batch[@]}"
-            fi
-          }
-          
-          batch_push
-
-      - name: Push tags
-        run: |
-          cd source_repo
-          # 单独推送标签，同样增加重试机制
-          git push target --tags || git push target --tags
+          # 推送所有分支和标签
+          git push target --all
+          git push target --tags
