@@ -22,6 +22,13 @@ jobs:
           echo "SOURCE_REPO=$SOURCE_REPO" >> $GITHUB_ENV
           echo "TARGET_REPO=$TARGET_REPO" >> $GITHUB_ENV
 
+      - name: Clean up existing directory
+        run: |
+          # 如果source_repo目录存在，先删除它
+          if [ -d "source_repo" ]; then
+            rm -rf source_repo
+          fi
+
       - name: Clone source repository
         run: |
           # 克隆源仓库（包含所有分支）
